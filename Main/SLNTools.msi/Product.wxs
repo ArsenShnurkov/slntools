@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi"
+     xmlns:netfx="http://schemas.microsoft.com/wix/NetFxExtension">
+
+  <!--The following variables must be modified for each release. A new GUID should be generated each time.-->
+  <?define ProductVersion=1.1.3 ?>
+  <?define ProductCode=BD71A18D-870E-4DC5-9A89-2A0FC2BEAB30?>
+
+  <!--The following variable should NEVER be modified. -->
+  <?define UpgradeCode=9A791ED6-C6EA-4234-84E2-9A08122BBC61 ?>
+
+  <Product Id="$(var.ProductCode)"
+           Name="Tools for SLN File"
+           Language="1033"
+           Version="$(var.ProductVersion)"
+           Manufacturer="CWDev"
+           UpgradeCode="$(var.UpgradeCode)">
+		<Package InstallerVersion="200" Compressed="yes" />
+
+		<Media Id="1" Cabinet="media.cab" EmbedCab="yes" />
+
+		<Directory Id="TARGETDIR" Name="SourceDir">
+			<Directory Id="ProgramFilesFolder">
+				<Directory Id="INSTALLLOCATION" Name="Tools for SLN File" />
+			</Directory>
+		</Directory>
+
+    <DirectoryRef Id="INSTALLLOCATION">
+      <Component Id="Component_SLNTools.exe" Guid="*">
+        <File Source="$(var.SLNTools.exe.TargetDir)\SLNTools.exe" KeyPath="yes" />
+
+        <ProgId Id="Filter for Microsoft Visual Studio Solution"
+                Description="Filter for Microsoft Visual Studio Solution"
+                IconIndex="0"
+                Advertise="yes">
+          <Extension Id="SLNFILTER" Advertise="yes">
+            <Verb Id="open" Command="&amp;Open" Argument="OpenFilterFile &quot;%1&quot;" Sequence="1" />
+            <Verb Id="edit" Command="&amp;Edit" Argument="EditFilterFile &quot;%1&quot;" Sequence="2" />
+            <Verb Id="createsln" Command="&amp;Create Filtered Solution Only" Argument="OpenFilterFile &quot;%1&quot; -CreateOnly" Sequence="3" />
+          </Extension>
+        </ProgId>
+      </Component>
+      <Component Id="Component_AddShellCommandForSLNFile" Guid="*">
+        <RegistryValue Root="HKCR" Key="VisualStudio.Launcher.sln\Shell\Create Filter\Command" Value="&quot;[INSTALLLOCATION]\SLNTools.exe&quot; CreateFilterFileFromSolution &quot;%1&quot;" Type="string" KeyPath="yes" />
+      </Component>
+
+      <Component Id="Component_CWDev.SLNTools.Core.dll" Guid="*">
+        <File Source="$(var.CWDev.SLNTools.Core.dll.TargetDir)\CWDev.SLNTools.Core.dll" />
+      </Component>
+      <Component Id="Component_CWDev.SLNTools.UIKit.dll" Guid="*">
+        <File Source="$(var.CWDev.SLNTools.UIKit.dll.TargetDir)\CWDev.SLNTools.UIKit.dll" />
+      </Component>
+    </DirectoryRef>
+
+    <Feature Id="ProductFeature" Title="Application" Level="1">
+      <ComponentRef Id="Component_SLNTools.exe" />
+      <ComponentRef Id="Component_CWDev.SLNTools.Core.dll" />
+      <ComponentRef Id="Component_CWDev.SLNTools.UIKit.dll" />
+      <ComponentRef Id="Component_AddShellCommandForSLNFile" />
+    </Feature>
+
+    <!-- Validation : .Net framework installed or not. ====================================================-->
+
+    <PropertyRef Id="NETFRAMEWORK20"/>
+    <Condition Message="This application requires .NET Framework 2.0. Please install the .NET Framework then run this installer again.">
+      <![CDATA[Installed OR NETFRAMEWORK20]]>
+    </Condition>
+
+    <!-- Validation : Another version of the product is already installed ? ===============================-->
+
+    <Condition Message="A more recent version of this product is already installed. Installation of this version cannot continue. To configure or remove the existing version of this product, use Add/Remove Programs on the Control Panel"><![CDATA[NOT NEWERPRODUCTFOUND]]></Condition>
+
+    <Property Id="PREVIOUSVERSIONSINSTALLED" Secure="yes" />
+    <Property Id="NEWERPRODUCTFOUND" Secure="yes" />
+    <Upgrade Id="$(var.UpgradeCode)">
+      <UpgradeVersion IncludeMaximum="no" Maximum="$(var.ProductVersion)" Property="PREVIOUSVERSIONSINSTALLED" />
+      <UpgradeVersion IncludeMinimum="yes" Minimum="$(var.ProductVersion)" Property="NEWERPRODUCTFOUND" OnlyDetect="yes" />
+    </Upgrade>
+
+    <!-- Execute Sequence tweaking ========================================================================-->
+
+    <Property Id="ALLUSERS"><![CDATA[1]]></Property>
+
+    <InstallExecuteSequence>
+      <RemoveExistingProducts After="InstallInitialize" />
+    </InstallExecuteSequence>
+
+    <!-- UI configuration =================================================================================-->
+
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.ProjectDir)\License.rtf" />
+    <Property Id="WIXUI_INSTALLDIR" Value="INSTALLLOCATION" />
+    <UIRef Id="WixUI_InstallDir" />
+    <UIRef Id="WixUI_ErrorProgressText" />
+  </Product>
+</Wix>
