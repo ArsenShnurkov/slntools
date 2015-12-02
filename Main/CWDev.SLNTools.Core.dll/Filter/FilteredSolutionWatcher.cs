@@ -17,13 +17,13 @@
 // THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
 // CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 // DEALINGS IN THE SOFTWARE.
+using System.Diagnostics;
 
 #endregion
 
 using System;
 using System.IO;
 using System.Threading;
-using System.Windows.Forms;
 
 namespace CWDev.SLNTools.Core.Filter
 {
@@ -97,8 +97,7 @@ namespace CWDev.SLNTools.Core.Filter
                 }
                 catch (Exception ex)
                 {
-                    // TODO Better handling of error, this assembly shouldn't display UI by itself
-                    MessageBox.Show(ex.ToString(), "OnChanged handler");
+					Trace.WriteLine("OnChanged handler: " + ex.ToString());
                 }
             }
         }
