@@ -547,8 +547,12 @@ namespace CWDev.SLNTools.CommandLine
             int screenWidth;
             CONSOLE_SCREEN_BUFFER_INFO csbi = new CONSOLE_SCREEN_BUFFER_INFO();
 
-            int rc;
-            rc = GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), ref csbi);
+			// If the function succeeds, the return value is nonzero.
+            int rc = GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), ref csbi);
+			if (rc == 0){
+				throw new ApplicationException ("Unable to obtain console width");
+			}
+
             screenWidth = csbi.dwSize.x;
             return screenWidth;
         }
