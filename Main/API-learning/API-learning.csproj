@@ -31,10 +31,19 @@
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" />
+    <Reference Include="System.Data.Linq" />
+    <Reference Include="System.Core" />
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="ReturnCodes.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+  <ItemGroup>
+    <ProjectReference Include="..\CWDev.SLNTools.Core.dll\CWDev.SLNTools.Core.dll.csproj">
+      <Project>{055CF73F-58D6-4E8F-89B0-3FDDC5CC57F5}</Project>
+      <Name>CWDev.SLNTools.Core.dll</Name>
+    </ProjectReference>
+  </ItemGroup>
 </Project>
