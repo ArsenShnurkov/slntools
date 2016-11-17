@@ -140,6 +140,7 @@ namespace CWDev.SLNTools.Core
             var projectTypeGuid = match.Groups["PROJECTTYPEGUID"].Value.Trim();
             var projectName = match.Groups["PROJECTNAME"].Value.Trim();
             var relativePath = match.Groups["RELATIVEPATH"].Value.Trim();
+			relativePath = relativePath.Replace('\\', Path.DirectorySeparatorChar);
             var projectGuid = match.Groups["PROJECTGUID"].Value.Trim();
 
             var projectSections = new List<Section>();

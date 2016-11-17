@@ -176,7 +176,43 @@ namespace CWDev.SLNTools.Core
                 }
             }
         }
-        public IEnumerable<Project> Dependencies
+		public IEnumerable<ReferencedAssembly> References
+		{
+			get
+			{
+				switch (m_projectTypeGuid)
+				{
+					case KnownProjectTypeGuid.CSharp:
+					case KnownProjectTypeGuid.FSharp:
+						if (!File.Exists(this.FullPath))
+						{
+							throw new SolutionFileException(string.Format(
+										"Cannot detect references of project '{0}' because the project file cannot be found.\nProject full path: '{1}'",
+										m_projectName,
+										this.FullPath));
+						}
+						var docManaged = new XmlDocument();
+						docManaged.Load(this.FullPath);
+
+						var xmlManager = new XmlNamespaceManager(docManaged.NameTable);
+						xmlManager.AddNamespace("prefix", "http://schemas.microsoft.com/developer/msbuild/2003");
+
+						foreach (XmlNode xmlNode in docManaged.SelectNodes(@"//prefix:Reference", xmlManager))
+						{
+							string referenceInclude = xmlNode.Attributes.GetNamedItem("Include").InnerText;
+							string referencePackage = xmlNode.SelectSingleNode(@"prefix:Package", xmlManager)?.InnerText.Trim(); // TODO handle null
+							yield return new ReferencedAssembly(
+										referenceInclude,
+										referencePackage);
+						}
+						break;
+					default:
+						break;
+				}
+			}
+		}
+
+		public IEnumerable<Project> Dependencies
         {
             get
             {
@@ -209,7 +245,7 @@ namespace CWDev.SLNTools.Core
                         if (! File.Exists(this.FullPath))
                         {
                             throw new SolutionFileException(string.Format(
-                                        "Cannot detect dependencies of projet '{0}' because the project file cannot be found.\nProject full path: '{1}'",
+                                        "Cannot detect dependencies of project '{0}' because the project file cannot be found.\nProject full path: '{1}'",
                                         m_projectName,
                                         this.FullPath));
                         }
