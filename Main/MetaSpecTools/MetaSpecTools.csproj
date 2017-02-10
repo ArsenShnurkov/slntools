@@ -112,6 +112,10 @@
     <Compile Include="sln_file\SolutionFileException.cs" />
     <Compile Include="sln_file\SolutionFileReader.cs" />
     <Compile Include="sln_file\SolutionFileWriter.cs" />
+    <Compile Include="FsPath.cs" />
+    <Compile Include="sln_file\SolutionList.cs" />
+    <Compile Include="msbuild_file\ProjectProxyList.cs" />
+    <Compile Include="msbuild_file\ProjectList.cs" />
   </ItemGroup>
   <ItemGroup>
     <BootstrapperPackage Include="Microsoft.Net.Client.3.5">

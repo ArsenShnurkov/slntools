@@ -59,7 +59,7 @@ namespace MetaSpecTools
 
         private void WriteProjects(SolutionFile solutionFile)
         {
-            foreach (var project in solutionFile.Projects)
+            foreach (Project project in solutionFile.Projects)
             {
                 m_writer.WriteLine("Project(\"{0}\") = \"{1}\", \"{2}\", \"{3}\"",
                             project.ProjectTypeGuid,
@@ -89,7 +89,7 @@ namespace MetaSpecTools
                 switch (globalSection.Name)
                 {
                     case "NestedProjects":
-                        foreach (var project in solutionFile.Projects)
+                        foreach (Project project in solutionFile.Projects)
                         {
                             if (project.ParentFolderGuid != null)
                             {
@@ -99,7 +99,7 @@ namespace MetaSpecTools
                         break;
 
                     case "ProjectConfigurationPlatforms":
-                        foreach (var project in solutionFile.Projects)
+                        foreach (Project project in solutionFile.Projects)
                         {
                             foreach (var propertyLine in project.ProjectConfigurationPlatformsLines)
                             {
@@ -115,7 +115,7 @@ namespace MetaSpecTools
                         if (globalSection.Name.EndsWith("Control", StringComparison.InvariantCultureIgnoreCase))
                         {
                             var index = 1;
-                            foreach (var project in solutionFile.Projects)
+                            foreach (Project project in solutionFile.Projects)
                             {
                                 if (project.VersionControlLines.Count > 0)
                                 {

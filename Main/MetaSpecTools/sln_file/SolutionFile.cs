@@ -1,4 +1,6 @@
 using System;
+using System.Diagnostics;
+using System.Text;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
@@ -10,70 +12,87 @@ namespace MetaSpecTools
 	public interface ISolutionContext
 	{
 		string FullPath { get; }
+
 		IEnumerable<SolutionFile> Solutions { get; }
+		SolutionFile LoadSolution(string path);
+
+		IProjectContext ProjectContext { get; }
 	}
 
 	public class SolutionFile : IProjectContext
-    {
-        #region public static: Methods FromFile / FromStream
+	{
+		#region public static: Methods FromFile / FromStream
 
-        public static SolutionFile FromFile(ISolutionContext context, string path)
+		public static SolutionFile FromFile(string path, ISolutionContext solutionContext)
+		{
+			string solutionFullPath = FsPath.Combine(solutionContext.FullPath, path);
+			using (var reader = new SolutionFileReader(solutionFullPath, solutionContext))
+			{
+				var f = reader.LoadSolutionFile(solutionFullPath);
+				return f;
+			}
+		}
+
+		public static SolutionFile FromStream(ISolutionContext context, string path, Stream stream)
+		{
+			using (var reader = new SolutionFileReader(stream))
+			{
+				var f = reader.CreateSolutionFile();
+				f.SolutionFullName = FsPath.Combine(context.FullPath, path);
+				return f;
+			}
+		}
+
+		#endregion
+
+		public const string DefaultExtension = ".sln";
+		public const string UndefinedName = "undefined" + DefaultExtension;
+		private string m_solutionFullName;
+		IProjectContext m_projectContext = null;
+		private ProjectList m_projects;
+		private readonly List<String> r_warnings;
+
+		public SolutionFile(ISolutionContext ctx) : this()
+		{
+			m_solutionFullName = Path.Combine(ctx.FullPath, SolutionFile.UndefinedName);
+			m_projectContext = ctx.ProjectContext;
+			m_projects = new ProjectList();
+		}
+
+		public SolutionFile()
         {
-			string solutionFullPath = Path.Combine(context.FullPath, path);
-            using (var reader = new SolutionFileReader(solutionFullPath))
-            {
-                var f = reader.ReadSolutionFile();
-				f.SolutionFullPath = solutionFullPath;
-                return f;
-            }
-        }
+            m_solutionFullName = null;
+			m_projectContext = null;
+			m_projects = new ProjectList();
 
-        public static SolutionFile FromStream(ISolutionContext context, string path, Stream stream)
-        {
-            using (var reader = new SolutionFileReader(stream))
-            {
-                var f = reader.ReadSolutionFile();
-				f.SolutionFullPath = Path.Combine(context.FullPath, path);
-                return f;
-            }
-        }
-
-        #endregion
-
-        private string m_solutionFullPath;
-        private readonly List<String> r_warnings;
-
-        public SolutionFile()
-        {
-            m_solutionFullPath = null;
-            r_warnings = new List<string>();
-            this.Headers = new List<string>();
-            this.Projects = new ProjectHashList(this);
-            this.GlobalSections = new SectionHashList();
-        }
+			this.Headers = new List<string>();
+			this.GlobalSections = new SectionHashList();
+			r_warnings = new List<string>();
+		}
 
         public SolutionFile(SolutionFile original)
-                    : this(original.SolutionFullPath, original.Headers, original.Projects, original.GlobalSections)
+			: this(original.FullPath, original.Headers, original.m_projects, original.GlobalSections)
         {
         }
 
-        public SolutionFile(string fullpath, IEnumerable<string> headers, IEnumerable<Project> projects, IEnumerable<Section> globalSections)
+		public SolutionFile(string fullpath, IEnumerable<string> headers, ProjectList projects, IEnumerable<Section> globalSections)
         {
-            m_solutionFullPath = fullpath;
+            m_solutionFullName = fullpath;
             this.Headers = new List<string>(headers);
-            this.Projects = new ProjectHashList(this, projects);
+			var projectContext = (this as ISolutionContext).ProjectContext;
+			this.m_projects = new ProjectList(projects);
             this.GlobalSections = new SectionHashList(globalSections);
         }
 
-        public string SolutionFullPath
+        public string SolutionFullName
         {
-            get { return m_solutionFullPath; }
-            set { m_solutionFullPath = value; }
+            get { return m_solutionFullName; }
+            set { m_solutionFullName = value; }
         }
 
         public List<string> Headers { get; private set; }
 
-        public ProjectHashList Projects { get; private set; }
+		public ProjectList Projects { get { return m_projects; } private set { m_projects = value;} }
 
         public SectionHashList GlobalSections { get; private set; }
 
@@ -83,7 +102,7 @@ namespace MetaSpecTools
         {
             get
             {
-                foreach (var project in this.Projects)
+                foreach (Project project in this.Projects)
                 {
                     if (project.ParentFolder == null)
                     {
@@ -100,7 +119,7 @@ namespace MetaSpecTools
 
         public void Save()
         {
-            SaveAs(m_solutionFullPath);
+            SaveAs(m_solutionFullName);
         }
 
         public void SaveAs(string solutionPath)
@@ -124,7 +143,7 @@ namespace MetaSpecTools
             var projectsByFullName = new Dictionary<string, Project>(StringComparer.InvariantCultureIgnoreCase);
             var acceptedDifferences = new List<Difference>();
             var conflicts = new List<Conflict>();
-            foreach (var project in this.Projects)
+            foreach (Project project in this.Projects)
             {
                 Project otherProject;
                 if (projectsByFullName.TryGetValue(project.ProjectFullName, out otherProject))
@@ -156,9 +175,9 @@ namespace MetaSpecTools
             return new NodeConflict(new ElementIdentifier("SolutionFile"), OperationOnParent.Modified, acceptedDifferences, conflicts);
         }
 
-        #region Methods ToElement / FromElement
+		#region Methods ToElement / FromElement
 
-        private const string TagHeader = "Header";
+		private const string TagHeader = "Header";
         private const string TagSolutionFolderGuids = "SolutionFolderGuids";
         private const string TagProject = "P_";
         private const string TagSolutionFolder = "SF_";
@@ -174,7 +193,7 @@ namespace MetaSpecTools
                         };
 
             var solutionFoldersElements = new List<Element>();
-            foreach (var project in this.Projects)
+            foreach (Project project in this.Projects)
             {
                 if (project.ProjectTypeGuid == KnownProjectTypeGuid.SolutionFolder)
                 {
@@ -217,7 +236,7 @@ namespace MetaSpecTools
         public static SolutionFile FromElement(NodeElement element)
         {
             var headers = new string[0];
-            var projects = new List<Project>();
+            var projects = new ProjectList();
             var globalSections = new List<Section>();
 
             var solutionFolderGuids = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
@@ -240,7 +259,7 @@ namespace MetaSpecTools
                 else if (identifier.Name.StartsWith(TagProject))
                 {
                     var projectGuid = identifier.Name.Substring(TagProject.Length);
-                    projects.Add(Project.FromElement(projectGuid, (NodeElement)child, solutionFolderGuids));
+                    projects.AddWithGuid(projectGuid, Project.FromElement(projectGuid, (NodeElement)child, solutionFolderGuids));
                 }
                 else if (identifier.Name.StartsWith(TagSolutionFolder))
                 {
@@ -249,7 +268,8 @@ namespace MetaSpecTools
                     {
                         throw new Exception("TODO");
                     }
-                    projects.Add(Project.FromElement(solutionFolderGuids[projectFullPath], (NodeElement)child, solutionFolderGuids));
+					string projectGuid = solutionFolderGuids[projectFullPath];
+					projects.AddWithGuid(projectGuid, Project.FromElement(projectGuid, (NodeElement)child, solutionFolderGuids));
                 }
                 else if (identifier.Name.StartsWith(TagGlobalSection))
                 {
@@ -266,20 +286,57 @@ namespace MetaSpecTools
 
 		#endregion
 
-		IEnumerable<Project> IProjectContext.Projects
-		{
-			get
-			{
-				return this.Projects;
-			}
-		}
-
 		public string FullPath
 		{
 			get
 			{
-				return this.m_solutionFullPath;
+				if (this.m_solutionFullName == null)
+				{
+					return string.Empty;
+				}
+				FileInfo f = new FileInfo(this.m_solutionFullName);
+				return f.DirectoryName;
 			}
+		}
+
+		public IProjectContext ProjectContext
+		{
+			get
+			{
+				return this;
+			}
+		}
+
+		IEnumerable<Project> IProjectContext.Projects
+		{
+			get
+			{
+				if (m_projectContext == null)
+				{
+					return this.Projects;
+				}
+				return m_projectContext.Projects;
+			}
+		}
+
+		public Project LoadProject(string path)
+		{
+			Project p;
+			if (m_projectContext == null)
+			{
+				p = new Project(this, path);
+			}
+			else
+			{
+				string projectFullPath = FsPath.Combine(this.FullPath, path);
+				p = m_projectContext.LoadProject(projectFullPath);
+			}
+			return p;
+		}
+
+		public string GetGuidForProject(Project project)
+		{
+			throw new NotImplementedException();
 		}
 	}
 }

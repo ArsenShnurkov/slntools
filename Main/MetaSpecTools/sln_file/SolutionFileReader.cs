@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -9,13 +10,23 @@ namespace MetaSpecTools
 {
     public class SolutionFileReader : IDisposable
     {
-        private StreamReader m_reader;
+		private ISolutionContext m_solutionContext;
+		private IProjectContext m_projectContext;
+		private StreamReader m_reader;
         private int m_currentLineNumber;
         private SolutionFile m_solutionFile;
 
-        public SolutionFileReader(string solutionFullPath)
-            : this(new FileStream(solutionFullPath, FileMode.Open, FileAccess.Read))
+		public SolutionFileReader(string path, ISolutionContext solutionContext)
+			: this(new FileStream(FsPath.Combine(solutionContext.FullPath, path), FileMode.Open, FileAccess.Read))
+		{
+			m_solutionContext = solutionContext;
+		}
+
+		public SolutionFileReader(string path, ISolutionContext solutionContext, IProjectContext projectContext)
+			: this(new FileStream(FsPath.Combine(solutionContext.FullPath, path), FileMode.Open, FileAccess.Read))
         {
+			m_solutionContext = solutionContext;
+			m_projectContext = projectContext;
         }
 
         public SolutionFileReader(Stream reader)
@@ -40,42 +51,76 @@ namespace MetaSpecTools
         private const string PatternParseHeader = @"^(\s*|Microsoft Visual Studio Solution File.*|#.*|VisualStudioVersion.*|MinimumVisualStudioVersion.*)$";
         private static readonly Regex rs_regexParseHeader = new Regex(PatternParseHeader);
 
-        public SolutionFile ReadSolutionFile()
-        {
-            lock (m_reader)
-            {
-                m_solutionFile = new SolutionFile();
+		public SolutionFile CreateSolutionFile()
+		{
+			string fullpath = FsPath.Combine(this.m_solutionContext.FullPath, SolutionFile.UndefinedName);
+			return LoadSolutionFile(fullpath); // read from m_reader stream
+		}
 
-                var isHeader = true;
-                for (var line = ReadLine(); line != null; line = ReadLine())
-                {
-                    if (isHeader && rs_regexParseHeader.IsMatch(line))
-                    {
-                        m_solutionFile.Headers.Add(line);
-                        continue;
-                    }
+		public SolutionFile LoadSolutionFile(string path)
+		{
+			lock (m_reader)
+			{
+				m_solutionFile = new SolutionFile(this.m_solutionContext);
+				m_solutionFile.SolutionFullName = path;
+				if (m_projectContext == null)
+				{
+					m_projectContext = m_solutionFile;
+				}
 
-                    isHeader = false;
-                    if (line.StartsWith("Project(", StringComparison.InvariantCultureIgnoreCase))
-                    {
-                        m_solutionFile.Projects.Add(ReadProject(line));
-                    }
-                    else if (String.Compare(line, "Global", StringComparison.InvariantCultureIgnoreCase) == 0)
-                    {
-                        ReadGlobal();
-                        // TODO valide end of file
-                        break;
-                    }
-                    else
-                    {
-                        throw new SolutionFileException(string.Format("Invalid line read on line #{0}.\nFound: {1}\nExpected: A line beginning with 'Project(' or 'Global'.",
-                                        m_currentLineNumber,
-                                        line));
-                    }
-                }
-                return m_solutionFile;
-            }
-        }
+				var isHeader = true;
+				for (var line = ReadLine(); line != null; line = ReadLine())
+				{
+					if (isHeader && rs_regexParseHeader.IsMatch(line))
+					{
+						m_solutionFile.Headers.Add(line);
+						continue;
+					}
+
+					isHeader = false;
+					if (line.StartsWith("Project(", StringComparison.InvariantCultureIgnoreCase))
+					{
+						try
+						{
+							string relativePath = GetRelativeProjectPath(line);
+							Project p = m_solutionFile.LoadProject(relativePath);
+							string guid = GetProjectGuid(line);
+							m_solutionFile.Projects.AddWithGuid(guid, p);
+							if (string.Compare(p.ProjectGuid, guid) != 0)
+							{
+								string fullPath = FsPath.Combine(m_solutionFile.FullPath, relativePath);
+								StringBuilder sb = new StringBuilder();
+								sb.AppendLine("Guid mismatch");
+								sb.AppendLine($"in solution {m_solutionFile.SolutionFullName}");
+								sb.AppendLine($"for project {fullPath}");
+								sb.AppendLine($"     .sln guid={guid}");
+								sb.AppendLine($"  .csproj guid={p.ProjectGuid}");
+								Console.WriteLine(sb.ToString());
+								//Debugger.Break();
+							}
+							ReadProject(line); // skip some syntax
+						}
+						catch (Exception)
+						{
+							Console.WriteLine($"project line {line} load failed in {m_solutionFile.FullPath}");
+						}
+					}
+					else if (String.Compare(line, "Global", StringComparison.InvariantCultureIgnoreCase) == 0)
+					{
+						ReadGlobal();
+						// TODO valide end of file
+						break;
+					}
+					else
+					{
+						throw new SolutionFileException(string.Format("Invalid line read on line #{0}.\nFound: {1}\nExpected: A line beginning with 'Project(' or 'Global'.",
+										m_currentLineNumber,
+										line));
+					}
+				}
+				return m_solutionFile;
+			}
+		}
 
         private string ReadLine()
         {
@@ -104,7 +149,36 @@ namespace MetaSpecTools
         private const string PatternParseProject = "^Project\\(\"(?<PROJECTTYPEGUID>.*)\"\\)\\s*=\\s*\"(?<PROJECTNAME>.*)\"\\s*,\\s*\"(?<RELATIVEPATH>.*)\"\\s*,\\s*\"(?<PROJECTGUID>.*)\"$";
         private static readonly Regex rs_regexParseProject = new Regex(PatternParseProject);
 
-        private Project ReadProject(string firstLine)
+		private string GetRelativeProjectPath(string firstLine)
+		{
+			var match = rs_regexParseProject.Match(firstLine);
+			if (!match.Success)
+			{
+				throw new SolutionFileException(string.Format("Invalid format for a project on line #{0}.\nFound: {1}\nExpected: A line starting with 'Global' or respecting the pattern '{2}'.",
+								m_currentLineNumber,
+								firstLine,
+								PatternParseProject));
+			}
+			var relativePath = match.Groups["RELATIVEPATH"].Value.Trim();
+			relativePath = relativePath.Replace('\\', Path.DirectorySeparatorChar);
+			return relativePath;
+		}
+
+		private string GetProjectGuid(string firstLine)
+		{
+			var match = rs_regexParseProject.Match(firstLine);
+			if (!match.Success)
+			{
+				throw new SolutionFileException(string.Format("Invalid format for a project on line #{0}.\nFound: {1}\nExpected: A line starting with 'Global' or respecting the pattern '{2}'.",
+								m_currentLineNumber,
+								firstLine,
+								PatternParseProject));
+			}
+			var projectGuid = match.Groups["PROJECTGUID"].Value.Trim();
+			return projectGuid;
+		}
+
+		private Project ReadProject(string firstLine)
         {
             var match = rs_regexParseProject.Match(firstLine);
             if (!match.Success)
@@ -128,15 +202,15 @@ namespace MetaSpecTools
             }
 
             return new Project(
-                        null,
-                        projectGuid,
-                        projectTypeGuid,
-                        projectName,
-                        relativePath,
-                        null,
-                        projectSections,
-                        null,
-                        null);
+				m_projectContext,
+                projectGuid,
+                projectTypeGuid,
+                projectName,
+                relativePath,
+                null,
+                projectSections,
+                null,
+                null);
         }
 
         private void ReadGlobal()
@@ -340,7 +414,7 @@ namespace MetaSpecTools
                     uniqueName = uniqueName.Replace(@"\\", @"\");
 
                     Project relatedProject = null;
-                    foreach (var project in m_solutionFile.Projects)
+                    foreach (Project project in m_solutionFile.Projects)
                     {
                         if (string.Compare(project.RelativePath, uniqueName, StringComparison.InvariantCultureIgnoreCase) == 0)
                         {

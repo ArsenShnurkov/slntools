@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 using System.Xml;
+using System.Xml.XPath;
 
 namespace MetaSpecTools
 {
@@ -10,8 +11,10 @@ namespace MetaSpecTools
 
 	public interface IProjectContext
 	{
-		IEnumerable<Project> Projects { get; }
 		string FullPath { get; }
+
+		IEnumerable<Project> Projects { get; }
+		Project LoadProject(string path);
 	}
 
     public class Project : MSBuildFile
@@ -26,9 +29,18 @@ namespace MetaSpecTools
         private readonly PropertyLineHashList r_versionControlLines;
         private readonly PropertyLineHashList r_projectConfigurationPlatformsLines;
 
-        public Project(IProjectContext container, Project original)
+		public Project(IProjectContext projectContext, string filename)
+			: base(((projectContext == null) ? filename : FsPath.Combine(projectContext.FullPath, filename)))
+		{
+			r_projectGuid = GetGuidFromFile(this.FileName);
+			r_projectSections = new SectionHashList();
+			r_versionControlLines = new PropertyLineHashList();
+			r_projectConfigurationPlatformsLines = new PropertyLineHashList();
+		}
+
+		public Project(IProjectContext projectContext, Project original)
             : this(
-                    container,
+                    projectContext,
                     original.ProjectGuid,
                     original.ProjectTypeGuid,
                     original.ProjectName,
@@ -50,7 +62,7 @@ namespace MetaSpecTools
                     IEnumerable<Section> projectSections,
                     IEnumerable<PropertyLine> versionControlLines,
                     IEnumerable<PropertyLine> projectConfigurationPlatformsLines)
-			: base ( Path.Combine(container.FullPath, relativePath) )
+			: base ( ((container == null) ? relativePath : FsPath.Combine(container.FullPath, relativePath)) )
         {
             r_container = container;
             r_projectGuid = projectGuid;
@@ -84,7 +96,7 @@ namespace MetaSpecTools
         }
         public string FullPath
         {
-            get { return Environment.ExpandEnvironmentVariables(Path.Combine(Path.GetDirectoryName(r_container.FullPath), m_relativePath)); }
+            get { return Environment.ExpandEnvironmentVariables(FsPath.Combine(r_container.FullPath, m_relativePath)); }
         }
         public string ParentFolderGuid
         {
@@ -327,9 +339,9 @@ namespace MetaSpecTools
                         // Example: "{GUID}|Infra.dll;{GUID2}|Services.dll;"
                         var propertyLine = r_projectSections["WebsiteProperties"].PropertyLines["ProjectReferences"];
                         var value = propertyLine.Value;
-                        if (value.StartsWith("\""))
+						if (value.StartsWith("\"", StringComparison.InvariantCulture))
                             value = value.Substring(1);
-                        if (value.EndsWith("\""))
+                        if (value.EndsWith("\"", StringComparison.InvariantCulture))
                             value = value.Substring(0, value.Length - 1);
 
                         foreach (string dependency in value.Split(';'))
@@ -516,6 +528,29 @@ namespace MetaSpecTools
                         projectConfigurationPlatformsLines);
         }
 
-        #endregion
-    }
+		#endregion
+		public static string GetGuidFromFile(string filename)
+		{
+			if (File.Exists(filename) == false)
+			{
+				throw new FileNotFoundException(nameof(filename));
+			}
+			XmlDocument d = new XmlDocument();
+			d.Load(filename);
+			var xmlNamespaceManager = new XmlNamespaceManager(new NameTable());
+			xmlNamespaceManager.AddNamespace("ns", MSBuildFile.NamespaceName);
+			XPathNavigator navigator = d.CreateNavigator();
+			navigator.MoveToRoot();
+			var xpath1 = "/ns:Project/ns:PropertyGroup/ns:ProjectGuid";
+			XPathExpression expr1 = navigator.Compile(xpath1);
+			expr1.SetContext(xmlNamespaceManager);
+			var nodeIterator1 = navigator.Select(expr1);
+			if (nodeIterator1.MoveNext())
+			{
+				string guid = nodeIterator1.Current.Value;
+				return guid;
+			}
+			return String.Empty;
+		}
+	}
 }

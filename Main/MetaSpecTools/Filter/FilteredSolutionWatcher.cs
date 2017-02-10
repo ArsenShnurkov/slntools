@@ -15,7 +15,7 @@ namespace MetaSpecTools.Filter
         private SolutionFile m_filteredSolution;
         private readonly FileSystemWatcher r_watcher;
 
-		string ISolutionContext.FullPath
+		public string FullPath
 		{
 			get
 			{
@@ -24,6 +24,22 @@ namespace MetaSpecTools.Filter
 		}
 
 		IEnumerable<SolutionFile> ISolutionContext.Solutions
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		string ISolutionContext.FullPath
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		IProjectContext ISolutionContext.ProjectContext
 		{
 			get
 			{
@@ -43,8 +59,8 @@ namespace MetaSpecTools.Filter
             r_watcher = new FileSystemWatcher
                 {
                     NotifyFilter = NotifyFilters.LastWrite,
-                    Path = Path.GetDirectoryName(m_filteredSolution.SolutionFullPath),
-                    Filter = Path.GetFileName(m_filteredSolution.SolutionFullPath)
+                    Path = Path.GetDirectoryName(m_filteredSolution.SolutionFullName),
+                    Filter = Path.GetFileName(m_filteredSolution.SolutionFullName)
                 };
             r_watcher.Changed += OnChanged;
         }
@@ -73,7 +89,7 @@ namespace MetaSpecTools.Filter
                 {
                     WaitForFileToBeReleased(e.FullPath);
 
-                    var newFilteredSolution = SolutionFile.FromFile(this, m_filteredSolution.SolutionFullPath);
+                    var newFilteredSolution = SolutionFile.FromFile(m_filteredSolution.SolutionFullName, this);
                     var difference = newFilteredSolution.CompareTo(m_filteredSolution);
                     if (difference != null)
                     {
@@ -117,5 +133,10 @@ namespace MetaSpecTools.Filter
                 }
             } while (DateTime.Now - start < TimeSpan.FromSeconds(20));
         }
-    }
+
+		SolutionFile ISolutionContext.LoadSolution(string path)
+		{
+			throw new NotImplementedException();
+		}
+	}
 }

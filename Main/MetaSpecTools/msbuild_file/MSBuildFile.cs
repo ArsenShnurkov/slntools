@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Xml.XPath;
 using System.Xml;
+using System.IO;
 
 public class MSBuildFile : IDisposable
 {
@@ -30,12 +31,16 @@ public class MSBuildFile : IDisposable
 		}
 	}
 
-	public MSBuildFile(XmlDocument d)
+	protected MSBuildFile(XmlDocument d)
 	{
 		this.doc = d;
 	}
-	public MSBuildFile(string filename)
+	protected MSBuildFile(string filename)
 	{
+		if (File.Exists(filename) == false)
+		{
+			throw new FileNotFoundException($"{filename} not found");
+		}
 		XmlDocument d = new XmlDocument();
 		d.Load(filename);
 		this.doc = d;

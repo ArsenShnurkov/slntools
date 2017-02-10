@@ -32,7 +32,7 @@ namespace MetaSpecTools.Filter
             var configNode = xmldoc.SelectSingleNode("Config");
 
             var sourceSlnNode = configNode.SelectSingleNode("SourceSLN");
-            filterFile.SourceSolutionFullPath = Path.Combine(
+            filterFile.SourceSolutionFullPath = FsPath.Combine(
                         Path.GetDirectoryName(filterFullPath),
                         Path.GetFileName(sourceSlnNode.InnerText));
 
@@ -71,14 +71,14 @@ namespace MetaSpecTools.Filter
 
         public SolutionFile SourceSolution
         {
-            get { return SolutionFile.FromFile(this, this.SourceSolutionFullPath); }
+            get { return SolutionFile.FromFile(this.SourceSolutionFullPath, this); }
         }
 
         public string FilterFullPath { get; set; }
 
         public string DestinationSolutionFullPath
         {
-            get { return Path.ChangeExtension(this.FilterFullPath, ".sln"); }
+			get { return Path.ChangeExtension(this.FilterFullPath, SolutionFile.DefaultExtension); }
         }
 
         public List<string> ProjectsToKeep { get; private set; }
@@ -87,7 +87,7 @@ namespace MetaSpecTools.Filter
 
         public bool CopyReSharperFiles { get; set; }
 
-		string ISolutionContext.FullPath
+		string FullPath
 		{
 			get
 			{
@@ -103,6 +103,30 @@ namespace MetaSpecTools.Filter
 			}
 		}
 
+		IEnumerable<Project> Projects
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		string ISolutionContext.FullPath
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
+		IProjectContext ISolutionContext.ProjectContext
+		{
+			get
+			{
+				throw new NotImplementedException();
+			}
+		}
+
 		public SolutionFile Apply()
         {
             return ApplyOn(this.SourceSolution);
@@ -110,16 +134,16 @@ namespace MetaSpecTools.Filter
 
         public SolutionFile ApplyOn(SolutionFile original)
         {
-            var includedProjects = new List<Project>();
+            var includedProjects = new ProjectList();
             foreach (var projectFullName in this.ProjectsToKeep)
             {
                 var projectToKeep = original.Projects.FindByFullName(projectFullName);
                 if (projectToKeep != null)
                 {
-                    AddRecursiveDependenciesToList(includedProjects, projectToKeep);
+                    AddRecursiveDependenciesToList(original, includedProjects, projectToKeep);
                     foreach (var descendant in projectToKeep.AllDescendants)
                     {
-                        AddRecursiveDependenciesToList(includedProjects, descendant);
+                        AddRecursiveDependenciesToList(original, includedProjects, descendant);
                     }
                 }
                 else
@@ -135,15 +159,16 @@ namespace MetaSpecTools.Filter
                         original.GlobalSections);
         }
 
-        private static void AddRecursiveDependenciesToList(List<Project> includedProjects, Project project)
+        private static void AddRecursiveDependenciesToList(SolutionFile guidMap, ProjectList includedProjects, Project project)
         {
             if (includedProjects.Contains(project))
                 return;
 
-            includedProjects.Add(project);
+			string guid = guidMap.GetGuidForProject(project);
+            includedProjects.AddWithGuid(guid, project);
             foreach (var dependency in project.Dependencies)
             {
-                AddRecursiveDependenciesToList(includedProjects, dependency);
+				AddRecursiveDependenciesToList(guidMap, includedProjects, dependency);
             }
         }
 
@@ -201,5 +226,10 @@ namespace MetaSpecTools.Filter
 
             docFilter.Save(filterFullPath);
         }
-    }
+
+		SolutionFile ISolutionContext.LoadSolution(string path)
+		{
+			throw new NotImplementedException();
+		}
+	}
 }
