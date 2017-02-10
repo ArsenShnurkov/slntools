@@ -19,9 +19,14 @@ namespace MetaSpecTools
 
     public class Project : MSBuildFile
     {
-        private readonly IProjectContext r_container;
+		private readonly IProjectContext m_container;
         private readonly string r_projectGuid;
-        private string m_projectTypeGuid;
+
+		/// <remarks>
+		/// http://stackoverflow.com/a/19111363/6017919
+		/// </remarks>
+		private string m_projectTypeGuid;
+
         private string m_projectName;
         private string m_relativePath;
         private string m_parentFolderGuid;
@@ -32,7 +37,9 @@ namespace MetaSpecTools
 		public Project(IProjectContext projectContext, string filename)
 			: base(((projectContext == null) ? filename : FsPath.Combine(projectContext.FullPath, filename)))
 		{
+			m_container = projectContext;
 			r_projectGuid = GetGuidFromFile(this.FileName);
+			m_projectTypeGuid = GetProjectTypeGuidFromFile(this.FileName);
 			r_projectSections = new SectionHashList();
 			r_versionControlLines = new PropertyLineHashList();
 			r_projectConfigurationPlatformsLines = new PropertyLineHashList();
@@ -64,7 +71,7 @@ namespace MetaSpecTools
                     IEnumerable<PropertyLine> projectConfigurationPlatformsLines)
 			: base ( ((container == null) ? relativePath : FsPath.Combine(container.FullPath, relativePath)) )
         {
-            r_container = container;
+            m_container = container;
             r_projectGuid = projectGuid;
             m_projectTypeGuid = projectTypeGuid;
             m_projectName = projectName;
@@ -96,7 +103,7 @@ namespace MetaSpecTools
         }
         public string FullPath
         {
-            get { return Environment.ExpandEnvironmentVariables(FsPath.Combine(r_container.FullPath, m_relativePath)); }
+            get { return Environment.ExpandEnvironmentVariables(FsPath.Combine(m_container.FullPath, m_relativePath)); }
         }
         public string ParentFolderGuid
         {
@@ -151,7 +158,7 @@ namespace MetaSpecTools
             {
                 if (m_projectTypeGuid == KnownProjectTypeGuid.SolutionFolder)
                 {
-                    foreach (Project project in r_container.Projects)
+                    foreach (Project project in m_container.Projects)
                     {
                         if (project.m_parentFolderGuid == r_projectGuid)
                             yield return project;
@@ -384,7 +391,7 @@ namespace MetaSpecTools
 
         private Project FindProjectInContainer(string projectGuid, string errorMessageFormat, params object[] errorMessageParams)
         {
-            var project = Project.FindByGuid(r_container.Projects, projectGuid);
+            var project = Project.FindByGuid(m_container.Projects, projectGuid);
             if (project == null)
             {
                 throw new SolutionFileException(string.Format(errorMessageFormat, errorMessageParams));
@@ -542,6 +549,29 @@ namespace MetaSpecTools
 			XPathNavigator navigator = d.CreateNavigator();
 			navigator.MoveToRoot();
 			var xpath1 = "/ns:Project/ns:PropertyGroup/ns:ProjectGuid";
+			XPathExpression expr1 = navigator.Compile(xpath1);
+			expr1.SetContext(xmlNamespaceManager);
+			var nodeIterator1 = navigator.Select(expr1);
+			if (nodeIterator1.MoveNext())
+			{
+				string guid = nodeIterator1.Current.Value;
+				return guid;
+			}
+			return String.Empty;
+		}
+		public static string GetProjectTypeGuidFromFile(string filename)
+		{
+			if (File.Exists(filename) == false)
+			{
+				throw new FileNotFoundException(nameof(filename));
+			}
+			XmlDocument d = new XmlDocument();
+			d.Load(filename);
+			var xmlNamespaceManager = new XmlNamespaceManager(new NameTable());
+			xmlNamespaceManager.AddNamespace("ns", MSBuildFile.NamespaceName);
+			XPathNavigator navigator = d.CreateNavigator();
+			navigator.MoveToRoot();
+			var xpath1 = "/ns:Project/ns:PropertyGroup/ns:ProjectTypeGuids";
 			XPathExpression expr1 = navigator.Compile(xpath1);
 			expr1.SetContext(xmlNamespaceManager);
 			var nodeIterator1 = navigator.Select(expr1);

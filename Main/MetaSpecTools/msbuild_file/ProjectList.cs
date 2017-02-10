@@ -7,6 +7,7 @@ namespace MetaSpecTools
 {
 	interface IProjectList : IEnumerable<Project>
 	{
+		int Count { get; }
 		Project FindByFullName(string projectFullName);
 		Project FindByGuid(string guid);
 		bool Contains(Project p);
@@ -18,6 +19,8 @@ namespace MetaSpecTools
 	{
 		Dictionary<string, Project> m_Projects = new Dictionary<string, Project>();
 		List<Project> m_orderedList = new List<Project>();
+
+		public int Count { get { return m_orderedList.Count; }  }
 
 		public ProjectList()
 		{
@@ -45,6 +48,7 @@ namespace MetaSpecTools
 		public void AddWithGuid(string guid, Project item)
 		{
 			m_Projects.Add(guid, item);
+			m_orderedList.Add(item);
 		}
 
 		public Project FindByFullName(string projectFullName)

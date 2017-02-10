@@ -84,6 +84,10 @@ namespace MetaSpecTools
 						{
 							string relativePath = GetRelativeProjectPath(line);
 							Project p = m_solutionFile.LoadProject(relativePath);
+							if (string.IsNullOrEmpty(p.ProjectTypeGuid))
+							{
+								Debugger.Break();
+							}
 							string guid = GetProjectGuid(line);
 							m_solutionFile.Projects.AddWithGuid(guid, p);
 							if (string.Compare(p.ProjectGuid, guid) != 0)
